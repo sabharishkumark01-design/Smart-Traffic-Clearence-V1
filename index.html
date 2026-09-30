@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Traffic Clearance</title>
+
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}
+body{background:#07111f;color:#fff;overflow:hidden}
+.header{height:70px;background:#0b1728;border-bottom:1px solid #203047;display:flex;align-items:center;justify-content:space-between;padding:0 25px;position:relative;z-index:1000}
+.logo{display:flex;align-items:center;gap:12px}.logo-icon{width:44px;height:44px;background:#e63946;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px}
+.logo h1{font-size:20px}.logo p{margin-top:3px;color:#91a1b7;font-size:12px}
+.online{display:flex;align-items:center;gap:8px;color:#55d68a;font-size:13px}.online-dot{width:9px;height:9px;background:#55d68a;border-radius:50%;box-shadow:0 0 10px #55d68a}
+.main{height:calc(100vh - 70px);display:flex}
+.sidebar{width:360px;background:#0b1728;border-right:1px solid #203047;padding:20px;overflow-y:auto;z-index:900}
+.card{background:#101f33;border:1px solid #203047;border-radius:14px;padding:18px;margin-bottom:15px}
+.card-title{font-size:15px;font-weight:bold;margin-bottom:15px}
+label{display:block;color:#91a1b7;font-size:12px;margin-top:13px;margin-bottom:6px}
+input,select{width:100%;background:#07111f;border:1px solid #293b54;color:#fff;padding:12px;border-radius:8px;outline:none}
+input:focus,select:focus{border-color:#4ea8ff}
+.role-buttons{display:flex;gap:8px}.role-button{flex:1;padding:12px 5px;border-radius:8px;border:1px solid #293b54;background:#07111f;color:#fff;cursor:pointer}
+.role-button.active{border-color:#4ea8ff;background:#143252}
+button{border:0;cursor:pointer;font-weight:bold}
+.register{width:100%;margin-top:18px;padding:13px;border-radius:8px;background:#1677ff;color:#fff}.register:hover{background:#318aff}
+.emergency-panel{display:none}.emergency-panel.show{display:block}
+.emergency-button{width:100%;padding:13px;margin-top:12px;border-radius:8px;background:#e63946;color:#fff}
+.clear-button{width:100%;padding:11px;margin-top:8px;border-radius:8px;background:#293b54;color:#fff}
+.status-box{margin-top:12px;padding:10px;border-radius:8px;background:#07111f;color:#91a1b7;font-size:12px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:#07111f;padding:13px;border-radius:8px}.stat-label{color:#91a1b7;font-size:11px}.stat-value{font-size:22px;margin-top:5px}
+.info{color:#91a1b7;font-size:11px;line-height:1.5}
+.map-container{flex:1;position:relative}#map{width:100%;height:100%}
+.map-panel{position:absolute;top:20px;right:20px;background:rgba(11,23,40,.95);border:1px solid #293b54;padding:14px;border-radius:12px;z-index:500;min-width:200px}
+.map-panel-title{font-size:12px;font-weight:bold;margin-bottom:10px}.legend{display:flex;align-items:center;gap:8px;font-size:11px;color:#b5c1d1;margin-top:7px}
+.legend-icon{width:13px;height:13px;border-radius:50%}.blue{background:#318aff}.red{background:#e63946}.green{background:#55d68a}
+.vehicle-marker{background:transparent;border:0;font-size:28px;text-align:center;line-height:40px}
+.alert{position:fixed;top:85px;left:50%;transform:translateX(-50%);background:#e63946;padding:15px 25px;border-radius:10px;z-index:2000;display:none;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.alert.show{display:block}
+.firebase-error{background:#3b1720;color:#ffb4bd;border:1px solid #8d3340;padding:10px;border-radius:8px;font-size:11px;line-height:1.5;margin-top:10px}
+@media(max-width:800px){body{overflow:auto}.main{height:auto;flex-direction:column}.sidebar{width:100%}.map-container{height:600px}}
+
+.clearance-card{border-color:#29415e}.clearance-status{padding:12px;border-radius:9px;background:#07111f;border:1px solid #293b54;color:#b9c7d8;font-size:12px;line-height:1.5}.clearance-status.safe{border-color:#2d7d57;color:#8ce7b0}.clearance-status.warn{border-color:#8d3340;background:#351821;color:#ffd0d5}.clearance-count{font-size:28px;font-weight:bold;margin-bottom:4px}.mini{font-size:11px;color:#91a1b7}.route-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.route-meta div{background:#07111f;padding:9px;border-radius:8px}.route-meta strong{display:block;font-size:14px;margin-top:3px}.clearance-alert{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#e63946;color:#fff;padding:17px 24px;border-radius:12px;z-index:2100;display:none;box-shadow:0 10px 35px rgba(0,0,0,.45);min-width:320px;max-width:min(560px,90vw);text-align:center;border:1px solid rgba(255,255,255,.14)}.clearance-alert.show{display:block}.clearance-alert strong{display:block;font-size:16px;margin-bottom:5px}.clearance-alert span{font-size:12px;color:#ffe7e9}.corridor-badge{display:inline-block;margin-top:8px;padding:4px 8px;border-radius:999px;background:#5d2028;color:#ffd4d8;font-size:10px}
+
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">🚑</div>
+    <div>
+      <h1>Smart Traffic Clearance</h1>
+      <p>Emergency Vehicle Priority System</p>
+    </div>
+  </div>
+  <div class="online"><span class="online-dot"></span>System Online</div>
+</header>
+
+<div class="main">
+
+<aside class="sidebar">
+
+<div class="card">
+  <div class="card-title">Vehicle Registration</div>
+
+  <label>Your Name</label>
+  <input id="name" placeholder="Enter your name">
+
+  <label>Vehicle Number</label>
+  <input id="vehicleNumber" placeholder="TN 00 AB 0000">
+
+  <label>Vehicle Type</label>
+  <select id="vehicleType">
+    <option value="Car">🚗 Car</option>
+    <option value="Bike">🏍️ Bike</option>
+    <option value="Bus">🚌 Bus</option>
+    <option value="Other">🚙 Other</option>
+  </select>
+
+  <label>User Type</label>
+  <div class="role-buttons">
+    <button id="normalRole" class="role-button active">🚗 Normal</button>
+    <button id="emergencyRole" class="role-button">🚑 Emergency</button>
+  </div>
+
+  <button id="registerBtn" class="register">Register & Start GPS</button>
+
+  <div id="gpsStatus" class="status-box">GPS not started</div>
+  <div id="firebaseStatus"></div>
+</div>
+
+<div id="emergencyPanel" class="card emergency-panel">
+  <div class="card-title">🚨 Emergency Route</div>
+
+  <p class="info">
+    Enter the hospital or destination where the emergency vehicle needs to go.
+  </p>
+
+  <label>Hospital / Destination</label>
+  <input id="destination" placeholder="Government General Hospital Chennai">
+
+  <button id="routeBtn" class="emergency-button">
+    🚨 Calculate Emergency Route
+  </button>
+
+  <button id="clearRouteBtn" class="clear-button">
+    Clear Route
+  </button>
+</div>
+
+
+<div id="clearanceCard" class="card clearance-card">
+  <div class="card-title">🚦 Emergency Clearance</div>
+  <div id="clearanceStatus" class="clearance-status safe">
+    <div class="clearance-count">READY</div>
+    <div>Waiting for an active emergency route.</div>
+  </div>
+  <div id="routeMeta" class="route-meta" style="display:none"></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Live System</div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Vehicles</div>
+      <div id="vehicleCount" class="stat-value">0</div>
+    </div>
+
+    <div class="stat">
+      <div class="stat-label">Emergency</div>
+      <div id="emergencyCount" class="stat-value">0</div>
+    </div>
+
+    <div class="stat">
+      <div class="stat-label">GPS</div>
+      <div id="gpsState" class="stat-value">OFF</div>
+    </div>
+
+    <div class="stat">
+      <div class="stat-label">Route</div>
+      <div id="routeState" class="stat-value">OFF</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">System Information</div>
+  <p class="info">
+    V2 adds real-time Firebase vehicle synchronization.
+    Open this application on two devices to see registered
+    vehicles on the same map.
+    <br><br>
+    Next stage: route-corridor detection and targeted emergency alerts.
+  </p>
+</div>
+
+</aside>
+
+<section class="map-container">
+  <div id="map"></div>
+
+  <div class="map-panel">
+    <div class="map-panel-title">LIVE TRAFFIC MAP</div>
+
+    <div class="legend">
+      <span class="legend-icon blue"></span>
+      Normal Vehicle
+    </div>
+
+    <div class="legend">
+      <span class="legend-icon red"></span>
+      Emergency Vehicle
+    </div>
+
+    <div class="legend">
+      <span class="legend-icon green"></span>
+      Your Location
+    </div>
+  </div>
+</section>
+
+</div>
+
+<div id="alert" class="alert">
+  🚨 Emergency route activated
+</div>
+
+<div id="clearanceAlert" class="clearance-alert">
+  <strong>🚨 EMERGENCY VEHICLE APPROACHING</strong>
+  <span id="clearanceAlertText">Please clear the way.</span>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+let createVehicle = null;
+let updateVehicle = null;
+let watchVehicles = null;
+let deleteVehicle = null;
+let publishEmergencyRoute = null;
+let watchEmergencyRoutes = null;
+let clearEmergencyRoute = null;
+
+async function loadFirebase() {
+  try {
+    const firebase = await import("./firebase-config.js");
+    createVehicle = firebase.createVehicle;
+    updateVehicle = firebase.updateVehicle;
+    watchVehicles = firebase.watchVehicles;
+    deleteVehicle = firebase.deleteVehicle;
+    publishEmergencyRoute = firebase.publishEmergencyRoute;
+    watchEmergencyRoutes = firebase.watchEmergencyRoutes;
+    clearEmergencyRoute = firebase.clearEmergencyRoute;
+
+    if (typeof watchVehicles === "function") {
+      watchVehicles(renderVehicles);
+    }
+    if (typeof watchEmergencyRoutes === "function") {
+      watchEmergencyRoutes(routes => {
+        activeEmergencyRoutes = routes || {};
+        renderEmergencyRoutes(routes || {});
+        evaluateEmergencyProximity();
+      });
+    }
+
+    $("firebaseStatus").innerHTML =
+      '<div class="status-box">🟢 Connected to Firebase</div>';
+  } catch (error) {
+    console.error("Firebase module failed to load:", error);
+    $("firebaseStatus").innerHTML =
+      '<div class="firebase-error">Firebase is not loaded. The map still works. Check firebase-config.js and Realtime Database rules.</div>';
+  }
+}
+
+let map;
+let role = "normal";
+let vehicleId = null;
+let gpsWatchId = null;
+let currentLocation = null;
+let myMarker = null;
+let accuracyCircle = null;
+let routeLine = null;
+let destinationMarker = null;
+let markers = {};
+let routeCoordinates = [];
+let latestVehicles = {};
+let activeEmergencyRoutes = {};
+const CLEARANCE_RADIUS_METERS = 100;
+let currentClearanceEmergency = null;
+
+const $ = id => document.getElementById(id);
+
+function initMap() {
+  if (typeof L === "undefined") {
+    $("map").innerHTML =
+      '<div style="padding:30px;color:#ffb4bd;font-family:Arial">Leaflet failed to load. Check your internet connection or browser extensions blocking unpkg.com.</div>';
+    return;
+  }
+
+  map = L.map("map").setView([13.0827, 80.2707], 13);
+
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution: "Tiles &copy; Esri &mdash; Source: Esri, OpenStreetMap contributors",
+      maxZoom: 19
+    }
+  ).addTo(map);
+
+  // Firebase is loaded separately so a Firebase error cannot hide the map.
+}
+
+function setRole(newRole) {
+  role = newRole;
+
+  $("normalRole").classList.toggle("active", role === "normal");
+  $("emergencyRole").classList.toggle("active", role === "emergency");
+  $("emergencyPanel").classList.toggle("show", role === "emergency");
+
+  if (myMarker && currentLocation) {
+    updateMyMarker(
+      currentLocation.lat,
+      currentLocation.lng,
+      currentLocation.accuracy || 10
+    );
+  }
+}
+
+$("normalRole").addEventListener("click", () => setRole("normal"));
+$("emergencyRole").addEventListener("click", () => setRole("emergency"));
+
+function makeIcon(vehicleRole, mine = false) {
+  let emoji = vehicleRole === "emergency" ? "🚑" : "🚗";
+
+  if (mine) {
+    return L.divIcon({
+      className: "vehicle-marker",
+      html: `<span style="filter:drop-shadow(0 0 8px #55d68a)">${emoji}</span>`,
+      iconSize: [42, 42],
+      iconAnchor: [21, 21]
+    });
+  }
+
+  return L.divIcon({
+    className: "vehicle-marker",
+    html: emoji,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21]
+  });
+}
+
+function updateMyMarker(lat, lng, accuracy) {
+  const icon = makeIcon(role, true);
+
+  if (!myMarker) {
+    myMarker = L.marker([lat, lng], { icon }).addTo(map);
+    myMarker.bindPopup("<strong>YOUR VEHICLE</strong>");
+
+    accuracyCircle = L.circle([lat, lng], {
+      radius: accuracy,
+      color: "#55d68a",
+      fillOpacity: 0.08
+    }).addTo(map);
+
+    map.setView([lat, lng], 16);
+  } else {
+    myMarker.setLatLng([lat, lng]);
+    myMarker.setIcon(icon);
+    accuracyCircle.setLatLng([lat, lng]);
+    accuracyCircle.setRadius(accuracy);
+  }
+}
+
+function renderVehicles(vehicles) {
+  latestVehicles = vehicles || {};
+  const ids = Object.keys(latestVehicles);
+
+  for (const id of Object.keys(markers)) {
+    if (!latestVehicles[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+  }
+
+  ids.forEach(id => {
+    const v = latestVehicles[id];
+
+    if (
+      id === vehicleId ||
+      !Number.isFinite(Number(v.latitude)) ||
+      !Number.isFinite(Number(v.longitude))
+    ) return;
+
+    const lat = Number(v.latitude);
+    const lng = Number(v.longitude);
+
+    const icon = makeIcon(v.role);
+
+    if (!markers[id]) {
+      markers[id] = L.marker([lat, lng], { icon }).addTo(map);
+    } else {
+      markers[id].setLatLng([lat, lng]);
+      markers[id].setIcon(icon);
+    }
+
+    markers[id].bindPopup(`
+      <strong>${v.role === "emergency" ? "🚑 Emergency Vehicle" : "🚗 Normal Vehicle"}</strong>
+      <br><br>
+      Driver: ${escapeHtml(v.name || "Unknown")}
+      <br>
+      Vehicle: ${escapeHtml(v.vehicleNumber || "Unknown")}
+      <br>
+      Type: ${escapeHtml(v.vehicleType || "Unknown")}
+      <br>
+      Speed: ${((Number(v.speed) || 0) * 3.6).toFixed(1)} km/h
+    `);
+  });
+
+  $("vehicleCount").textContent = ids.length;
+
+  $("emergencyCount").textContent =
+    ids.filter(id => latestVehicles[id].role === "emergency").length;
+
+  evaluateEmergencyProximity();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function toRadians(degrees) {
+  return degrees * Math.PI / 180;
+}
+
+function distanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+            Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function pointToSegmentDistanceMeters(point, start, end) {
+  const latScale = 111320;
+  const lngScale = 111320 * Math.cos(toRadians(point.lat));
+
+  const px = (point.lng - start.lng) * lngScale;
+  const py = (point.lat - start.lat) * latScale;
+  const sx = 0;
+  const sy = 0;
+  const ex = (end.lng - start.lng) * lngScale;
+  const ey = (end.lat - start.lat) * latScale;
+
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const lengthSquared = dx * dx + dy * dy;
+
+  let t = lengthSquared === 0 ? 0 : ((px - sx) * dx + (py - sy) * dy) / lengthSquared;
+  t = Math.max(0, Math.min(1, t));
+
+  const closestX = sx + t * dx;
+  const closestY = sy + t * dy;
+  return Math.hypot(px - closestX, py - closestY);
+}
+
+function distanceToRouteMeters(lat, lng, coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length === 0) return Infinity;
+  if (coordinates.length === 1) {
+    return distanceMeters(lat, lng, coordinates[0][0], coordinates[0][1]);
+  }
+
+  const point = { lat, lng };
+  let best = Infinity;
+
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const start = { lat: Number(coordinates[i][0]), lng: Number(coordinates[i][1]) };
+    const end = { lat: Number(coordinates[i + 1][0]), lng: Number(coordinates[i + 1][1]) };
+    const distance = pointToSegmentDistanceMeters(point, start, end);
+    if (distance < best) best = distance;
+  }
+
+  return best;
+}
+
+function simplifyRouteCoordinates(coordinates, maxPoints = 220) {
+  if (!Array.isArray(coordinates) || coordinates.length <= maxPoints) return coordinates;
+  const step = (coordinates.length - 1) / (maxPoints - 1);
+  const reduced = [];
+  for (let i = 0; i < maxPoints; i++) {
+    reduced.push(coordinates[Math.round(i * step)]);
+  }
+  return reduced;
+}
+
+function renderEmergencyRoutes(routes) {
+  const routeIds = Object.keys(routes || {}).filter(id => routes[id]?.active);
+  const status = $("clearanceStatus");
+  const meta = $("routeMeta");
+
+  if (role === "emergency") {
+    const myRoute = vehicleId ? routes?.[vehicleId] : null;
+    if (myRoute?.active) {
+      status.className = "clearance-status warn";
+      status.innerHTML = `<div class="clearance-count">${routeIds.length}</div><div>Active emergency route${routeIds.length === 1 ? "" : "s"} in the network.</div><span class="corridor-badge">100 m clearance corridor</span>`;
+    } else if (routeIds.length) {
+      status.className = "clearance-status warn";
+      status.innerHTML = `<div class="clearance-count">${routeIds.length}</div><div>Emergency route${routeIds.length === 1 ? "" : "s"} active elsewhere.</div>`;
+    } else {
+      status.className = "clearance-status safe";
+      status.innerHTML = '<div class="clearance-count">READY</div><div>No active emergency route.</div>';
+    }
+    return;
+  }
+
+  if (!routeIds.length) {
+    currentClearanceEmergency = null;
+    status.className = "clearance-status safe";
+    status.innerHTML = '<div class="clearance-count">READY</div><div>No active emergency route near you.</div>';
+    meta.style.display = "none";
+  }
+}
+
+function evaluateEmergencyProximity() {
+  if (role === "normal" && currentLocation) {
+    let nearest = null;
+
+    for (const [id, route] of Object.entries(activeEmergencyRoutes || {})) {
+      if (!route?.active || id === vehicleId || !Array.isArray(route.routeCoordinates)) continue;
+      const distance = distanceToRouteMeters(
+        currentLocation.lat,
+        currentLocation.lng,
+        route.routeCoordinates
+      );
+
+      if (distance <= CLEARANCE_RADIUS_METERS && (!nearest || distance < nearest.distance)) {
+        nearest = { id, route, distance };
+      }
+    }
+
+    const status = $("clearanceStatus");
+    const meta = $("routeMeta");
+
+    if (nearest) {
+      currentClearanceEmergency = nearest;
+      status.className = "clearance-status warn";
+      status.innerHTML = `<div class="clearance-count">${Math.round(nearest.distance)} m</div><div>An emergency vehicle route is within your clearance zone.</div><span class="corridor-badge">PLEASE CLEAR THE WAY</span>`;
+      meta.style.display = "grid";
+      meta.innerHTML = `<div><span class="mini">Destination</span><strong>🏥 ${escapeHtml(nearest.route.destination || "Hospital")}</strong></div><div><span class="mini">Route</span><strong>🚑 ${escapeHtml(nearest.route.vehicleNumber || "Emergency")}</strong></div>`;
+      showClearanceAlert(nearest);
+    } else {
+      currentClearanceEmergency = null;
+      status.className = "clearance-status safe";
+      status.innerHTML = '<div class="clearance-count">CLEAR</div><div>No emergency vehicle route within 100 m.</div>';
+      meta.style.display = "none";
+      hideClearanceAlert();
+    }
+  }
+
+  if (role === "emergency" && currentLocation) {
+    const myRoute = vehicleId ? activeEmergencyRoutes?.[vehicleId] : null;
+    const nearby = [];
+    if (myRoute?.active && Array.isArray(myRoute.routeCoordinates)) {
+      for (const [id, v] of Object.entries(latestVehicles || {})) {
+        if (id === vehicleId || v?.role !== "normal") continue;
+        const lat = Number(v.latitude);
+        const lng = Number(v.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const distance = distanceToRouteMeters(lat, lng, myRoute.routeCoordinates);
+        if (distance <= CLEARANCE_RADIUS_METERS) {
+          nearby.push({ id, distance, vehicle: v });
+        }
+      }
+    }
+
+    const status = $("clearanceStatus");
+    const meta = $("routeMeta");
+    if (myRoute?.active) {
+      status.className = nearby.length ? "clearance-status warn" : "clearance-status safe";
+      status.innerHTML = `<div class="clearance-count">${nearby.length}</div><div>Normal vehicle${nearby.length === 1 ? "" : "s"} inside the 100 m clearance corridor.</div><span class="corridor-badge">LIVE CORRIDOR DETECTION</span>`;
+      meta.style.display = "grid";
+      meta.innerHTML = `<div><span class="mini">Destination</span><strong>🏥 ${escapeHtml(myRoute.destination || "Hospital")}</strong></div><div><span class="mini">Longest alert</span><strong>${nearby.length ? Math.round(Math.min(...nearby.map(x => x.distance))) + " m" : "None"}</strong></div>`;
+      highlightCorridorVehicles(nearby);
+    }
+  }
+}
+
+function highlightCorridorVehicles(nearby) {
+  const nearbyIds = new Set(nearby.map(item => item.id));
+  for (const [id, marker] of Object.entries(markers)) {
+    if (!marker || !marker.getElement) continue;
+    const el = marker.getElement();
+    if (!el) continue;
+    el.style.filter = nearbyIds.has(id) ? "drop-shadow(0 0 12px #e63946)" : "";
+  }
+}
+
+let lastClearanceAlertKey = null;
+function showClearanceAlert(nearest) {
+  const key = `${nearest.id}:${Math.round(nearest.distance / 10)}`;
+  $("clearanceAlertText").textContent = `Emergency vehicle ${nearest.route.vehicleNumber || "is approaching"} • ${Math.round(nearest.distance)} m from the route • Destination: ${nearest.route.destination || "hospital"}`;
+  $("clearanceAlert").classList.add("show");
+  if (lastClearanceAlertKey !== key) {
+    lastClearanceAlertKey = key;
+  }
+}
+
+function hideClearanceAlert() {
+  $("clearanceAlert").classList.remove("show");
+}
+
+async function registerCurrentVehicle() {
+  const name = $("name").value.trim();
+  const vehicleNumber = $("vehicleNumber").value.trim();
+  const vehicleType = $("vehicleType").value;
+
+  if (!name || !vehicleNumber) {
+    alert("Enter your name and vehicle number.");
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    alert("Your browser does not support GPS.");
+    return;
+  }
+
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+  }
+
+  vehicleId =
+    "vehicle_" +
+    Date.now() +
+    "_" +
+    Math.random().toString(36).slice(2, 8);
+
+  $("gpsStatus").textContent = "Requesting GPS permission...";
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    async position => {
+      const c = position.coords;
+
+      currentLocation = {
+        lat: c.latitude,
+        lng: c.longitude,
+        accuracy: c.accuracy
+      };
+
+      $("gpsStatus").textContent =
+        `GPS Active • ±${Math.round(c.accuracy)}m`;
+
+      $("gpsState").textContent = "ON";
+
+      updateMyMarker(
+        c.latitude,
+        c.longitude,
+        c.accuracy
+      );
+
+      const data = {
+        name,
+        vehicleNumber,
+        vehicleType,
+        role,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        accuracy: c.accuracy,
+        speed: c.speed || 0,
+        heading: c.heading ?? null
+      };
+
+      try {
+        if (!createVehicle || !updateVehicle) {
+          $("firebaseStatus").innerHTML =
+            '<div class="firebase-error">GPS is working, but Firebase is not available yet.</div>';
+          return;
+        }
+
+        const exists = window.vehicleCreated === true;
+
+        if (!exists) {
+          await createVehicle(vehicleId, data);
+          window.vehicleCreated = true;
+          $("firebaseStatus").innerHTML =
+            '<div class="status-box">🟢 Connected to Firebase</div>';
+        } else {
+          await updateVehicle(vehicleId, data);
+        }
+      } catch (error) {
+        console.error(error);
+        $("firebaseStatus").innerHTML =
+          '<div class="firebase-error">Firebase connection failed. Check firebase-config.js and Realtime Database setup.</div>';
+      }
+    },
+    error => {
+      $("gpsStatus").textContent = "GPS Error: " + error.message;
+      $("gpsState").textContent = "ERROR";
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000
+    }
+  );
+}
+
+$("registerBtn").addEventListener("click", registerCurrentVehicle);
+
+async function startEmergencyRoute() {
+  if (role !== "emergency") {
+    alert("Select Emergency Vehicle first.");
+    return;
+  }
+
+  if (!vehicleId || !currentLocation) {
+    alert("Register the emergency vehicle and wait for GPS first.");
+    return;
+  }
+
+  const destination = $("destination").value.trim();
+  if (!destination) {
+    alert("Enter a hospital or destination.");
+    return;
+  }
+
+  if (!publishEmergencyRoute) {
+    alert("Firebase route publishing is not available yet.");
+    return;
+  }
+
+  $("routeState").textContent = "SEARCH";
+
+  try {
+    const searchUrl =
+      "https://nominatim.openstreetmap.org/search" +
+      "?format=json&limit=1&q=" +
+      encodeURIComponent(destination);
+
+    const searchResponse = await fetch(searchUrl, {
+      headers: { "Accept-Language": "en" }
+    });
+    const locations = await searchResponse.json();
+
+    if (!locations.length) {
+      alert("Destination not found.");
+      $("routeState").textContent = "OFF";
+      return;
+    }
+
+    const destinationLat = Number(locations[0].lat);
+    const destinationLng = Number(locations[0].lon);
+
+    const routeUrl =
+      "https://router.project-osrm.org/route/v1/driving/" +
+      `${currentLocation.lng},${currentLocation.lat};` +
+      `${destinationLng},${destinationLat}` +
+      "?overview=full&geometries=geojson";
+
+    const routeResponse = await fetch(routeUrl);
+    const routeData = await routeResponse.json();
+
+    if (!routeData.routes?.length) {
+      alert("Unable to calculate route.");
+      $("routeState").textContent = "OFF";
+      return;
+    }
+
+    const route = routeData.routes[0];
+    clearRoute(false);
+
+    routeCoordinates = route.geometry.coordinates.map(c => [c[1], c[0]]);
+    const firebaseRouteCoordinates = simplifyRouteCoordinates(routeCoordinates, 220);
+
+    routeLine = L.polyline(routeCoordinates, {
+      color: "#e63946",
+      weight: 7,
+      opacity: 0.9
+    }).addTo(map);
+
+    destinationMarker = L.marker([destinationLat, destinationLng]).addTo(map);
+    destinationMarker.bindPopup(
+      `<strong>🏥 Emergency Destination</strong><br>${escapeHtml(destination)}`
+    ).openPopup();
+
+    map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+
+    const distanceKm = (route.distance / 1000).toFixed(2);
+    const durationMin = Math.round(route.duration / 60);
+
+    await publishEmergencyRoute(vehicleId, {
+      active: true,
+      vehicleNumber: $("vehicleNumber").value.trim(),
+      destination,
+      destinationLat,
+      destinationLng,
+      routeCoordinates: firebaseRouteCoordinates,
+      distanceKm,
+      durationMin
+    });
+
+    $("routeState").textContent = "ACTIVE";
+    $("gpsStatus").textContent = `🚑 Route Active • ${distanceKm} km • ${durationMin} min`;
+
+    $("alert").textContent = "🚨 Emergency route activated — nearby vehicles are being detected";
+    $("alert").classList.add("show");
+    setTimeout(() => $("alert").classList.remove("show"), 4000);
+
+    evaluateEmergencyProximity();
+  } catch (error) {
+    console.error(error);
+    alert("Route calculation or Firebase publishing failed: " + (error.message || "Unknown error"));
+    $("routeState").textContent = "OFF";
+  }
+}
+
+$("routeBtn").addEventListener(
+  "click",
+  startEmergencyRoute
+);
+
+async function clearRoute(updateFirebase = true) {
+  if (routeLine) {
+    map.removeLayer(routeLine);
+    routeLine = null;
+  }
+
+  if (destinationMarker) {
+    map.removeLayer(destinationMarker);
+    destinationMarker = null;
+  }
+
+  routeCoordinates = [];
+  $("routeState").textContent = "OFF";
+
+  if (updateFirebase && role === "emergency" && vehicleId && typeof clearEmergencyRoute === "function") {
+    try {
+      await clearEmergencyRoute(vehicleId);
+    } catch (error) {
+      console.error("Unable to clear Firebase emergency route:", error);
+    }
+  }
+
+  evaluateEmergencyProximity();
+}
+
+$("clearRouteBtn").addEventListener(
+  "click",
+  clearRoute
+);
+
+window.addEventListener("beforeunload", () => {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+  }
+
+  if (vehicleId && role === "emergency" && typeof clearEmergencyRoute === "function") {
+    clearEmergencyRoute(vehicleId).catch(() => {});
+  }
+
+  if (vehicleId && typeof deleteVehicle === "function") {
+    deleteVehicle(vehicleId).catch(() => {});
+  }
+});
+
+initMap();
+loadFirebase();
+
+</script>
+
+</body>
+</html>
